@@ -333,12 +333,9 @@
         createApp({
             setup() {
                 // =========================================================================
-                // CONFIGURAÇÃO CORRETA DO BANCO DE DADOS (JSONBLOB)
+                // CONFIGURAÇÃO DO BANCO DE DADOS (JSONBLOB)
                 // =========================================================================
-                // ID atualizado fornecido pelo usuário
                 const ID_DO_BANCO_COMPARTILHADO = "019b0f19-077c-73b4-aa3f-3a4df2c079ed";
-
-                // URL base correta da API (sem /api/jsonBlob extra)
                 const API_URL = 'https://api.jsonblob.com';
 
                 // Estado da Aplicação
@@ -370,10 +367,9 @@
                     loading.value = true;
                     loadingMessage.value = 'Configurando banco de dados inicial...';
                     
-                    const initialData = []; // Começa vazio ou com dados de exemplo se preferir
+                    const initialData = []; 
 
                     try {
-                        // PUT na URL correta: https://api.jsonblob.com/{ID}
                         const putResponse = await fetch(`${API_URL}/${blobId.value}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
@@ -399,11 +395,9 @@
                     loadingMessage.value = 'Sincronizando...';
                     
                     try {
-                        // GET na URL correta: https://api.jsonblob.com/{ID}
                         const response = await fetch(`${API_URL}/${blobId.value}`);
                         
                         if (!response.ok) {
-                            // Se 404, o blob com este ID ainda não foi criado. Vamos criar.
                             if (response.status === 404) {
                                 console.log("Blob não encontrado, criando novo...");
                                 await createInitialBlob();
@@ -412,10 +406,27 @@
                             throw new Error('Falha ao buscar dados');
                         }
                         const data = await response.json();
-                        children.value = data;
+                        
+                        // CORREÇÃO: Garante que é um Array
+                        if (Array.isArray(data)) {
+                            children.value = data;
+                        } else {
+                            // Se recebermos lixo ou objeto errado, reseta para evitar erro de push
+                            console.warn('Formato de dados corrompido recebido. Resetando para lista vazia.');
+                            children.value = [];
+                            
+                            // Opcional: já tenta salvar a versão corrigida
+                            await fetch(`${API_URL}/${blobId.value}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify([])
+                            });
+                        }
+
                     } catch (error) {
                         console.error(error);
                         notify('Erro ao buscar dados. Tente novamente.', 'error');
+                        children.value = []; // Garante a UI viva
                     } finally {
                         loading.value = false;
                     }
@@ -425,7 +436,6 @@
                     if (!blobId.value) return;
                     
                     try {
-                        // PUT na URL correta para atualizar
                         await fetch(`${API_URL}/${blobId.value}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
@@ -454,7 +464,6 @@
                 };
 
                 const adoptGift = async (childId, giftId) => {
-                    // Recarrega antes de tentar adotar para evitar conflitos
                     await fetchChildren(); 
 
                     const child = children.value.find(c => c.id === childId);
@@ -477,14 +486,11 @@
 
                 const returnGift = async (childId, giftId) => {
                     if(!confirm('Deseja realmente cancelar esta doação?')) return;
-                    
-                    // Recarrega para garantir integridade
                     await fetchChildren();
 
                     const child = children.value.find(c => c.id === childId);
                     if (child) {
                         const gift = child.gifts.find(g => g.id === giftId);
-                        // Verifica se ainda é o doador (segurança extra)
                         if (gift && gift.donor === currentUser.value) {
                             gift.status = 'available';
                             gift.donor = null;
@@ -512,6 +518,9 @@
 
                 // --- Lógica Admin ---
                 const addChild = async () => {
+                    // Garante que é array antes de dar push (segurança extra)
+                    if (!Array.isArray(children.value)) children.value = [];
+
                     const gifts = [];
                     if (newChild.value.gift1) gifts.push({ id: Date.now(), description: newChild.value.gift1, status: 'available', donor: null });
                     if (newChild.value.gift2) gifts.push({ id: Date.now()+1, description: newChild.value.gift2, status: 'available', donor: null });
@@ -566,6 +575,7 @@
                 };
 
                 const totalAvailableGifts = computed(() => {
+                    if (!Array.isArray(children.value)) return 0;
                     let total = 0;
                     children.value.forEach(c => {
                         c.gifts.forEach(g => {
@@ -576,6 +586,7 @@
                 });
 
                 const myGifts = computed(() => {
+                    if (!Array.isArray(children.value)) return [];
                     const list = [];
                     children.value.forEach(c => {
                         c.gifts.forEach(g => {
