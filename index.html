@@ -269,7 +269,7 @@
                         <h3 class="font-bold text-lg mb-4 text-gray-700 flex justify-between">
                             <span>Lista Atual ({{ children.length }})</span>
                             <div class="text-xs font-normal flex items-center gap-2">
-                                <span class="bg-gray-100 px-2 py-1 rounded text-gray-400 font-mono">{{ blobId }}</span>
+                                <span class="bg-gray-100 px-2 py-1 rounded text-gray-400 font-mono">{{ basketName }}</span>
                             </div>
                         </h3>
                         
@@ -333,10 +333,16 @@
         createApp({
             setup() {
                 // =========================================================================
-                // CONFIGURAÇÃO DO BANCO DE DADOS (JSONBLOB)
+                // CONFIGURAÇÃO DO BANCO DE DADOS (PANTRY CLOUD)
                 // =========================================================================
-                const ID_DO_BANCO_COMPARTILHADO = "019b0f19-077c-73b4-aa3f-3a4df2c079ed";
-                const API_URL = 'https://api.jsonblob.com';
+                // Para usar: 
+                // 1. Acesse https://getpantry.cloud e crie uma "pantry" gratuita
+                // 2. Copie o ID gerado e substitua abaixo
+                // 3. O "basket" será criado automaticamente
+                // =========================================================================
+                const PANTRY_ID = "df55b280-e951-4d5e-bbe6-98c2b64b5e92"; // <-- SUBSTITUA pelo seu Pantry ID
+                const BASKET_NAME = "Magnum";
+                const API_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket/${BASKET_NAME}`;
 
                 // Estado da Aplicação
                 const currentScreen = ref('login');
@@ -347,7 +353,7 @@
                 const notification = ref({ message: '', type: '' });
                 
                 // Dados Principais:
-                const blobId = ref(ID_DO_BANCO_COMPARTILHADO);
+                const basketName = ref(BASKET_NAME);
                 const children = ref([]);
 
                 const newChild = ref({
@@ -360,27 +366,27 @@
                     setTimeout(() => notification.value = { message: '', type: '' }, 3000);
                 };
 
-                // --- Lógica da API (JSONBlob) ---
+                // --- Lógica da API (Pantry Cloud) ---
                 
                 // Inicializa/Reseta o banco se ele não existir
-                const createInitialBlob = async () => {
+                const createInitialBasket = async () => {
                     loading.value = true;
                     loadingMessage.value = 'Configurando banco de dados inicial...';
                     
-                    const initialData = []; 
+                    const initialData = { children: [] }; 
 
                     try {
-                        const putResponse = await fetch(`${API_URL}/${blobId.value}`, {
-                            method: 'PUT',
+                        const response = await fetch(API_URL, {
+                            method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(initialData)
                         });
 
-                        if (putResponse.ok) {
-                             children.value = initialData;
+                        if (response.ok) {
+                             children.value = [];
                              notify('Banco de dados conectado com sucesso!', 'success');
                         } else {
-                            throw new Error('Não foi possível inicializar o ID fixo. Status: ' + putResponse.status);
+                            throw new Error('Não foi possível inicializar o basket. Status: ' + response.status);
                         }
                     } catch (error) {
                         console.error(error);
@@ -395,31 +401,34 @@
                     loadingMessage.value = 'Sincronizando...';
                     
                     try {
-                        const response = await fetch(`${API_URL}/${blobId.value}`);
+                        const response = await fetch(API_URL);
                         
                         if (!response.ok) {
-                            if (response.status === 404) {
-                                console.log("Blob não encontrado, criando novo...");
-                                await createInitialBlob();
+                            if (response.status === 400 || response.status === 404) {
+                                console.log("Basket não encontrado, criando novo...");
+                                await createInitialBasket();
                                 return;
                             }
                             throw new Error('Falha ao buscar dados');
                         }
                         const data = await response.json();
                         
-                        // CORREÇÃO: Garante que é um Array
-                        if (Array.isArray(data)) {
+                        // Pantry retorna um objeto, precisamos extrair o array de children
+                        if (data && Array.isArray(data.children)) {
+                            children.value = data.children;
+                        } else if (Array.isArray(data)) {
+                            // Compatibilidade caso o formato seja array direto
                             children.value = data;
                         } else {
-                            // Se recebermos lixo ou objeto errado, reseta para evitar erro de push
+                            // Se recebermos formato errado, reseta para evitar erro
                             console.warn('Formato de dados corrompido recebido. Resetando para lista vazia.');
                             children.value = [];
                             
-                            // Opcional: já tenta salvar a versão corrigida
-                            await fetch(`${API_URL}/${blobId.value}`, {
+                            // Salva a versão corrigida
+                            await fetch(API_URL, {
                                 method: 'PUT',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify([])
+                                body: JSON.stringify({ children: [] })
                             });
                         }
 
@@ -433,13 +442,11 @@
                 };
 
                 const syncData = async () => {
-                    if (!blobId.value) return;
-                    
                     try {
-                        await fetch(`${API_URL}/${blobId.value}`, {
+                        await fetch(API_URL, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(children.value)
+                            body: JSON.stringify({ children: children.value })
                         });
                     } catch (error) {
                         console.error(error);
@@ -609,7 +616,7 @@
                     loading,
                     loadingMessage,
                     children,
-                    blobId,
+                    basketName,
                     newChild,
                     handleLogin,
                     adoptGift,
