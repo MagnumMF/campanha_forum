@@ -142,7 +142,7 @@
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div v-for="child in children" :key="child.id" class="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition duration-300 border border-gray-100">
+                    <div v-for="child in sortedChildren" :key="child.id" class="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition duration-300 border border-gray-100">
                         <div class="bg-christmas-green p-3 flex justify-between items-center text-white">
                             <span class="font-bold text-lg"><i class="fa-solid fa-user"></i> {{ child.name }}</span>
                             <span class="bg-white text-christmas-green text-xs font-bold px-2 py-1 rounded-full">{{ child.age }} anos</span>
@@ -341,7 +341,7 @@
                 // 3. O "basket" será criado automaticamente
                 // =========================================================================
                 const PANTRY_ID = "df55b280-e951-4d5e-bbe6-98c2b64b5e92"; // <-- SUBSTITUA pelo seu Pantry ID
-                const BASKET_NAME = "natal_solidario";
+                const BASKET_NAME = "Magnum";
                 const API_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket/${BASKET_NAME}`;
 
                 // Estado da Aplicação
@@ -582,6 +582,12 @@
                     window.print();
                 };
 
+                // Crianças ordenadas por idade (do mais novo para o mais velho)
+                const sortedChildren = computed(() => {
+                    if (!Array.isArray(children.value)) return [];
+                    return [...children.value].sort((a, b) => a.age - b.age);
+                });
+
                 const totalAvailableGifts = computed(() => {
                     if (!Array.isArray(children.value)) return 0;
                     let total = 0;
@@ -617,6 +623,7 @@
                     loading,
                     loadingMessage,
                     children,
+                    sortedChildren,
                     basketName,
                     newChild,
                     handleLogin,
