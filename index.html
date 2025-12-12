@@ -341,7 +341,7 @@
                 // 3. O "basket" será criado automaticamente
                 // =========================================================================
                 const PANTRY_ID = "df55b280-e951-4d5e-bbe6-98c2b64b5e92"; // <-- SUBSTITUA pelo seu Pantry ID
-                const BASKET_NAME = "Magnum";
+                const BASKET_NAME = "natal_solidario";
                 const API_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket/${BASKET_NAME}`;
 
                 // Estado da Aplicação
@@ -424,9 +424,9 @@
                             console.warn('Formato de dados corrompido recebido. Resetando para lista vazia.');
                             children.value = [];
                             
-                            // Salva a versão corrigida
+                            // Salva a versão corrigida (usar POST para substituir)
                             await fetch(API_URL, {
-                                method: 'PUT',
+                                method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ children: [] })
                             });
@@ -443,8 +443,9 @@
 
                 const syncData = async () => {
                     try {
+                        // IMPORTANTE: Usar POST para SUBSTITUIR os dados (não PUT, que faz merge/append)
                         await fetch(API_URL, {
-                            method: 'PUT',
+                            method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ children: children.value })
                         });
