@@ -327,16 +327,20 @@
 
     </div>
 
-    <script>
+<script>
         const { createApp, ref, computed, onMounted } = Vue;
 
         createApp({
             setup() {
                 // =========================================================================
-                // CONFIGURAÇÃO DO BANCO DE DADOS (JSONBLOB)
+                // CONFIGURAÇÃO DO BANCO DE DADOS (GITHUB GIST)
                 // =========================================================================
-                const ID_DO_BANCO_COMPARTILHADO = "019b0f19-077c-73b4-aa3f-3a4df2c079ed";
-                const API_URL = 'https://api.jsonblob.com';
+                // PREENCHA AQUI COM SEUS DADOS:
+                const GITHUB_TOKEN = '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'; 
+                const GIST_ID = 'a849691d6b470ef4a17195fbf9aa0100';
+                const GIST_FILENAME = 'natal_dados.json'; // O nome do arquivo criado no Gist
+
+                const API_URL = `https://api.github.com/gists/${GIST_ID}`;
 
                 // Estado da Aplicação
                 const currentScreen = ref('login');
@@ -347,7 +351,7 @@
                 const notification = ref({ message: '', type: '' });
                 
                 // Dados Principais:
-                const blobId = ref(ID_DO_BANCO_COMPARTILHADO);
+                const blobId = ref(GIST_ID); // Mantive o nome da ref para compatibilidade visual
                 const children = ref([]);
 
                 const newChild = ref({
@@ -360,94 +364,83 @@
                     setTimeout(() => notification.value = { message: '', type: '' }, 3000);
                 };
 
-                // --- Lógica da API (JSONBlob) ---
-                
-                // Inicializa/Reseta o banco se ele não existir
-                const createInitialBlob = async () => {
-                    loading.value = true;
-                    loadingMessage.value = 'Configurando banco de dados inicial...';
-                    
-                    const initialData = []; 
-
-                    try {
-                        const putResponse = await fetch(`${API_URL}/${blobId.value}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(initialData)
-                        });
-
-                        if (putResponse.ok) {
-                             children.value = initialData;
-                             notify('Banco de dados conectado com sucesso!', 'success');
-                        } else {
-                            throw new Error('Não foi possível inicializar o ID fixo. Status: ' + putResponse.status);
-                        }
-                    } catch (error) {
-                        console.error(error);
-                        notify('Erro de conexão inicial: ' + error.message, 'error');
-                    } finally {
-                        loading.value = false;
-                    }
-                };
+                // --- Lógica da API (GITHUB GIST) ---
 
                 const fetchChildren = async () => {
                     loading.value = true;
-                    loadingMessage.value = 'Sincronizando...';
+                    loadingMessage.value = 'Sincronizando com GitHub...';
                     
                     try {
-                        const response = await fetch(`${API_URL}/${blobId.value}`);
-                        
-                        if (!response.ok) {
-                            if (response.status === 404) {
-                                console.log("Blob não encontrado, criando novo...");
-                                await createInitialBlob();
-                                return;
+                        // Importante: Timestamp para evitar cache do navegador
+                        const response = await fetch(`${API_URL}?t=${Date.now()}`, {
+                            headers: {
+                                'Authorization': `token ${GITHUB_TOKEN}`
                             }
-                            throw new Error('Falha ao buscar dados');
-                        }
+                        });
+                        
+                        if (!response.ok) throw new Error('Falha ao conectar com GitHub');
+                        
                         const data = await response.json();
                         
-                        // CORREÇÃO: Garante que é um Array
-                        if (Array.isArray(data)) {
-                            children.value = data;
+                        // A estrutura do Gist é data.files['nome_arquivo'].content
+                        if (data.files && data.files[GIST_FILENAME]) {
+                            const rawContent = data.files[GIST_FILENAME].content;
+                            const parsedData = JSON.parse(rawContent);
+
+                            if (Array.isArray(parsedData)) {
+                                children.value = parsedData;
+                            } else {
+                                children.value = [];
+                            }
                         } else {
-                            // Se recebermos lixo ou objeto errado, reseta para evitar erro de push
-                            console.warn('Formato de dados corrompido recebido. Resetando para lista vazia.');
-                            children.value = [];
-                            
-                            // Opcional: já tenta salvar a versão corrigida
-                            await fetch(`${API_URL}/${blobId.value}`, {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify([])
-                            });
+                            throw new Error('Arquivo não encontrado no Gist');
                         }
 
                     } catch (error) {
                         console.error(error);
-                        notify('Erro ao buscar dados. Tente novamente.', 'error');
-                        children.value = []; // Garante a UI viva
+                        notify('Erro ao buscar dados: ' + error.message, 'error');
+                        // Se falhar, mantém o estado atual ou vazio para não quebrar a UI
+                        if (!children.value) children.value = [];
                     } finally {
                         loading.value = false;
                     }
                 };
 
                 const syncData = async () => {
-                    if (!blobId.value) return;
+                    if (!GIST_ID || !GITHUB_TOKEN) {
+                        notify('Configuração do GitHub incompleta', 'error');
+                        return;
+                    }
                     
                     try {
-                        await fetch(`${API_URL}/${blobId.value}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(children.value)
+                        // Estrutura específica para UPDATE no Gist API
+                        const payload = {
+                            files: {
+                                [GIST_FILENAME]: {
+                                    content: JSON.stringify(children.value, null, 2) // Pretty print para ficar legível no Gist
+                                }
+                            }
+                        };
+
+                        const response = await fetch(API_URL, {
+                            method: 'PATCH', // GitHub usa PATCH para updates
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Authorization': `token ${GITHUB_TOKEN}`
+                            },
+                            body: JSON.stringify(payload)
                         });
+
+                        if (!response.ok) throw new Error('Erro ao salvar no GitHub');
+
                     } catch (error) {
                         console.error(error);
-                        notify('Erro ao salvar na nuvem. Verifique sua conexão.', 'error');
+                        notify('Erro ao salvar na nuvem. Verifique permissões.', 'error');
+                        throw error; // Repassa o erro para a função chamadora parar o loading
                     }
                 };
 
-                // --- Lógica de Negócio ---
+                // --- Lógica de Negócio (Mantida igual) ---
 
                 const handleLogin = async () => {
                     if (!userInput.value.trim()) return;
@@ -456,7 +449,7 @@
                     await fetchChildren();
 
                     if (currentUser.value.toUpperCase() === 'ADMIN') {
-                        currentUser.value = 'ADMIN'; // Normaliza
+                        currentUser.value = 'ADMIN'; 
                         currentScreen.value = 'admin';
                     } else {
                         currentScreen.value = 'selection';
@@ -464,20 +457,26 @@
                 };
 
                 const adoptGift = async (childId, giftId) => {
-                    await fetchChildren(); 
+                    await fetchChildren(); // Recarrega para evitar conflito de edição
 
                     const child = children.value.find(c => c.id === childId);
                     if (child) {
                         const gift = child.gifts.find(g => g.id === giftId);
+                        // Checa novamente se está disponível após o refresh
                         if (gift && gift.status === 'available') {
                             gift.status = 'taken';
                             gift.donor = currentUser.value;
                             
                             loading.value = true;
-                            await syncData();
+                            try {
+                                await syncData();
+                                notify(`Você adotou: ${gift.description}!`, 'success');
+                            } catch (e) {
+                                // Se der erro ao salvar, reverte visualmente
+                                gift.status = 'available';
+                                gift.donor = null;
+                            }
                             loading.value = false;
-                            
-                            notify(`Você adotou: ${gift.description}!`, 'success');
                         } else {
                             notify('Ops! Alguém acabou de pegar este presente.', 'error');
                         }
@@ -518,7 +517,6 @@
 
                 // --- Lógica Admin ---
                 const addChild = async () => {
-                    // Garante que é array antes de dar push (segurança extra)
                     if (!Array.isArray(children.value)) children.value = [];
 
                     const gifts = [];
@@ -545,7 +543,9 @@
                 const deleteChild = async (id) => {
                     if(confirm('Tem certeza que deseja remover esta criança da lista?')) {
                         children.value = children.value.filter(c => c.id !== id);
+                        loading.value = true;
                         await syncData();
+                        loading.value = false;
                     }
                 };
 
@@ -602,6 +602,10 @@
                     return list;
                 });
 
+                // Inicialização
+                // Opcional: Se quiser carregar os dados assim que abrir a página, descomente abaixo.
+                // onMounted(() => { fetchChildren(); });
+
                 return {
                     currentScreen,
                     currentUser,
@@ -627,6 +631,7 @@
                 };
             }
         }).mount('#app');
-    </script>
+</script>
 </body>
 </html>
+
